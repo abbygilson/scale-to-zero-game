@@ -37,7 +37,7 @@ return [
 
     'round_timeout_ms' => 30000,
 
-    'server_region' => env('GAME_SERVER_REGION', 'Sydney'),
+    'server_region' => env('GAME_SERVER_REGION', 'Frankfurt'),
 
     /*
     |--------------------------------------------------------------------------
@@ -66,34 +66,34 @@ return [
 
     'targets' => [
         [
-            'name' => 'Sydney 1',
-            'url' => 'https://scale-to-zero-target-1-production-lwhlwv.laravel-demo.cloud',
-            'application_id' => 'app-a324493f-4cd6-422f-a96f-aaca6382d77c',
-            'environment_id' => 'env-a324493f-6548-4ef8-ac70-001f12e2e037',
+            'name' => 'Frankfurt 1',
+            'url' => 'https://scale-to-zero-target-1-production-xaiici.laravel.cloud',
+            'application_id' => 'app-a33f46b6-72ed-47b0-9ded-449bb0a1787d',
+            'environment_id' => 'env-a33f46bc-cf7d-4bfc-8a33-45a23d7971c8',
         ],
         [
-            'name' => 'Sydney 2',
-            'url' => 'https://scale-to-zero-target-2-production-v6dyta.laravel-demo.cloud',
-            'application_id' => 'app-a3244a8f-8a67-4be4-b6c3-87f8fd124bdd',
-            'environment_id' => 'env-a3244a92-30a6-4190-a00e-a1eead75b36e',
+            'name' => 'Frankfurt 2',
+            'url' => 'https://scale-to-zero-target-2-production-r1t1s6.laravel.cloud',
+            'application_id' => 'app-a33f4702-420f-4ab4-af31-3b2e7257ef2d',
+            'environment_id' => 'env-a33f4705-540d-414f-9de7-fef1ea739159',
         ],
         [
-            'name' => 'Sydney 3',
-            'url' => 'https://scale-to-zero-target-3-production-cv987p.laravel-demo.cloud',
-            'application_id' => 'app-a3244aa5-48f0-40cd-ab57-8cc151240068',
-            'environment_id' => 'env-a3244aa7-c144-4657-8f75-07feb0677690',
+            'name' => 'Frankfurt 3',
+            'url' => 'https://scale-to-zero-target-3-production-p7uwxk.laravel.cloud',
+            'application_id' => 'app-a33f4710-a14e-418d-96a2-d2b60e386d47',
+            'environment_id' => 'env-a33f4713-7ba9-42a6-87c6-a572279c696e',
         ],
         [
-            'name' => 'Sydney 4',
-            'url' => 'https://scale-to-zero-target-4-production-da8lup.laravel-demo.cloud',
-            'application_id' => 'app-a3244ab4-833d-4d30-aba0-d05f025e4594',
-            'environment_id' => 'env-a3244ab7-2baf-48da-a5b9-164536a683bc',
+            'name' => 'Frankfurt 4',
+            'url' => 'https://scale-to-zero-target-4-production-kry72q.laravel.cloud',
+            'application_id' => 'app-a33f471f-6305-41df-a1ac-0ed800f84129',
+            'environment_id' => 'env-a33f4722-7116-4503-b6d3-4b31a64e557f',
         ],
         [
-            'name' => 'Sydney 5',
-            'url' => 'https://scale-to-zero-target-5-production-reuzoo.laravel-demo.cloud',
-            'application_id' => 'app-a3244ac1-b9b5-423b-8c51-d5219146a641',
-            'environment_id' => 'env-a3244ac4-0ecb-4493-818a-cba9bce4c060',
+            'name' => 'Frankfurt 5',
+            'url' => 'https://scale-to-zero-target-5-production-kvbnkp.laravel.cloud',
+            'application_id' => 'app-a33f472e-95d4-44c3-b9d1-feb2a6be565d',
+            'environment_id' => 'env-a33f4731-6d1f-443f-8954-95e4990c3d11',
         ],
     ],
 

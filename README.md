@@ -25,21 +25,21 @@ The Laravel Cloud API does not reliably report when an environment has scaled to
 
 ## Targets
 
-The targets are five Laravel Cloud apps in the **Laravel GTM** organization, region **ap-southeast-2 (Sydney)**. They are configured in [`config/game.php`](config/game.php).
+The targets are five Laravel Cloud apps in the **Abby Gilson** organization, region **eu-central-1 (Frankfurt)**, set up for WAWTech in Warsaw. They are configured in [`config/game.php`](config/game.php).
 
 | Name | Cloud application | URL |
 | --- | --- | --- |
-| Sydney 1 | `scale-to-zero-target-1` | https://scale-to-zero-target-1-production-lwhlwv.laravel-demo.cloud |
-| Sydney 2 | `scale-to-zero-target-2` | https://scale-to-zero-target-2-production-v6dyta.laravel-demo.cloud |
-| Sydney 3 | `scale-to-zero-target-3` | https://scale-to-zero-target-3-production-cv987p.laravel-demo.cloud |
-| Sydney 4 | `scale-to-zero-target-4` | https://scale-to-zero-target-4-production-da8lup.laravel-demo.cloud |
-| Sydney 5 | `scale-to-zero-target-5` | https://scale-to-zero-target-5-production-reuzoo.laravel-demo.cloud |
+| Frankfurt 1 | `scale-to-zero-target-1` | https://scale-to-zero-target-1-production-xaiici.laravel.cloud |
+| Frankfurt 2 | `scale-to-zero-target-2` | https://scale-to-zero-target-2-production-r1t1s6.laravel.cloud |
+| Frankfurt 3 | `scale-to-zero-target-3` | https://scale-to-zero-target-3-production-p7uwxk.laravel.cloud |
+| Frankfurt 4 | `scale-to-zero-target-4` | https://scale-to-zero-target-4-production-kry72q.laravel.cloud |
+| Frankfurt 5 | `scale-to-zero-target-5` | https://scale-to-zero-target-5-production-kvbnkp.laravel.cloud |
 
-All five deploy from [`dhicking/scale-to-zero-target`](https://github.com/dhicking/scale-to-zero-target), a plain Laravel app with one added `/wake` route. Each target has these settings:
+All five deploy from the [`target/`](target) folder of this repository, a plain Laravel app with one added `/wake` route. In Laravel Cloud, each app uses `target` as its root directory. Each target has these settings:
 
 - Flex compute with Scale-to-Zero after **1 minute** without requests. This must be shorter than the game's 90-second cooldown, or players race apps that are still awake.
 - `SESSION_DRIVER=cookie` and `CACHE_STORE=file`, so the app needs no database.
-- No `X-Frame-Options` header, so the preview can load in an iframe.
+- The **Frame** response header set to allow all origins, so the preview can load in an iframe. Cloud's default, `deny`, blocks it.
 
 The `/wake` route skips the `web` middleware so that sessions and cookies do not add to the timed response. It returns these headers:
 
@@ -53,12 +53,12 @@ Put the targets in the region closest to the event. A cold request crosses the n
 
 To move the game to another event:
 
-1. Create new target apps in a region near the event from `dhicking/scale-to-zero-target`, with the settings above.
+1. Create new target apps in a region near the event from this repository with the root directory `target`, with the settings above.
 2. Update `targets` in `config/game.php` with each app's URL, application ID, and environment ID.
 
 ## The game app
 
-The game itself runs as `scale-to-zero-game` in Laravel GTM, ap-southeast-2. Scale-to-Zero is off for the game app, so visitors never wait for it to wake.
+The game itself deploys from the root of this repository. Scale-to-Zero is off for the game app, so visitors never wait for it to wake.
 
 To clear the leaderboard and the attendee list before an event, run this command. It deletes all rounds **and** all attendees.
 
