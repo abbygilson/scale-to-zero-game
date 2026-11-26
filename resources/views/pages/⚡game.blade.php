@@ -342,7 +342,7 @@ new #[Title('Guess the Scale to Zero')] class extends Component
                         </div>
 
                         <div class="flex flex-col gap-1.5">
-                            <label for="player-email" class="text-sm font-medium text-slate-700 xl:text-base">Your email</label>
+                            <label for="player-email" class="text-sm font-medium text-slate-700 xl:text-base">Your work email</label>
                             <input
                                 id="player-email"
                                 name="player_email"

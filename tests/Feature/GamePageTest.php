@@ -76,7 +76,7 @@ it('saves a normalized attendee before showing the guess form', function () {
         ->assertHasNoErrors()
         ->assertSee("You're in", false)
         ->assertSee('Your guess (ms)')
-        ->assertDontSee('Your email');
+        ->assertDontSee('Your work email');
 
     expect(Attendee::sole())
         ->name->toBe('Josh Cirre')

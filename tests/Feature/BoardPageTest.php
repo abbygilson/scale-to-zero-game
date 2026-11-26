@@ -19,7 +19,7 @@ it('shows the closest guesses on the big leaderboard', function () {
 });
 
 it('only feeds fresh rounds into the recent guesses', function () {
-    $stale = Round::factory()->create(['created_at' => now()->subMinutes(5)]);
+    $stale = Round::factory()->create(['created_at' => now()->subMinutes(6)]);
     $fresh = Round::factory()->create(['created_at' => now()]);
 
     Livewire::test('pages::board')

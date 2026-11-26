@@ -11,7 +11,7 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
     /**
      * Seconds a guess stays in the recent feed before it fades away entirely.
      */
-    public const int RECENT_WINDOW_SECONDS = 90;
+    public const int RECENT_WINDOW_SECONDS = 300;
 
     #[Computed]
     public function leaderboard(): Collection
@@ -39,6 +39,50 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
         {{-- Left: the big leaderboard --}}
         <main class="flex min-w-0 flex-[3] flex-col gap-8">
             <h1 class="text-4xl font-semibold tracking-tight xl:text-6xl">Guess the <span class="font-serif italic">scale to zero</span> 💤</h1>
+
+            {{-- Prize banner: a looping wake stopwatch beside rotating calls to action. wire:ignore keeps the poll from restarting it. --}}
+            <div
+                wire:ignore
+                x-data="{
+                    ms: 0,
+                    awake: false,
+                    word: 0,
+                    words: ['Guess the wake time.', 'Closest guess wins…', 'a Laravel Cloud beanie!'],
+                    init() {
+                        const run = () => {
+                            const target = 300 + Math.round(Math.random() * 200);
+                            const start = performance.now();
+                            this.awake = false;
+                            const tick = (now) => {
+                                const t = Math.min((now - start) / 1400, 1);
+                                this.ms = Math.round(target * (1 - Math.pow(1 - t, 3)));
+                                if (t < 1) { requestAnimationFrame(tick); } else { this.awake = true; setTimeout(run, 2200); }
+                            };
+                            requestAnimationFrame(tick);
+                        };
+                        run();
+                        setInterval(() => this.word = (this.word + 1) % this.words.length, 2600);
+                    },
+                }"
+                class="flex shrink-0 items-center gap-8 overflow-hidden rounded-3xl bg-cloud px-8 py-6 text-white shadow-2xl xl:gap-10 xl:px-10 xl:py-8"
+            >
+                <div class="flex shrink-0 flex-col items-center gap-1">
+                    <div class="w-[6.5ch] text-right font-mono text-5xl font-semibold tracking-tight tabular-nums xl:text-7xl"><span x-text="ms">0</span><span class="text-white/60"> ms</span></div>
+                    <div class="font-mono text-xs tracking-widest uppercase transition-colors duration-300 xl:text-sm" :class="awake ? 'text-emerald-300' : 'text-white/60'" x-text="awake ? '● awake' : '○ waking…'"></div>
+                </div>
+
+                <div class="h-16 w-px shrink-0 bg-white/25 xl:h-20"></div>
+
+                <div class="relative h-[1.25em] min-w-0 flex-1 overflow-hidden text-4xl font-semibold tracking-tight xl:text-6xl">
+                    <template x-for="(text, index) in words" :key="index">
+                        <p
+                            class="absolute inset-0 truncate transition-all duration-300 ease-out"
+                            :class="index === word ? 'translate-y-0 opacity-100 delay-300' : (index === (word + words.length - 1) % words.length ? '-translate-y-full opacity-0' : 'translate-y-full opacity-0')"
+                            x-text="text"
+                        ></p>
+                    </template>
+                </div>
+            </div>
 
             <div class="flex min-h-0 flex-1 flex-col rounded-3xl bg-white/85 p-8 shadow-2xl ring-1 ring-black/5 backdrop-blur-md xl:p-10">
                 <h2 class="font-mono text-sm font-medium tracking-wide text-slate-400 uppercase xl:text-base">Leaderboard</h2>
