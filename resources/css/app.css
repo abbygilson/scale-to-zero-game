@@ -11,3 +11,25 @@
     /* Laravel Cloud brand blue */
     --color-cloud: rgb(0 87 255);
 }
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* Snowflakes that fall over the booth board when someone takes the #1 spot.
+   Kept global because Livewire scopes component styles, which drops @keyframes. */
+.board-flake {
+    position: absolute;
+    top: -3rem;
+    color: rgb(147 187 255);
+    text-shadow: 0 0 4px rgb(0 87 255 / 0.5);
+    animation-name: board-snow;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+}
+
+@keyframes board-snow {
+    to {
+        transform: translate(var(--drift), 115vh) rotate(360deg);
+    }
+}

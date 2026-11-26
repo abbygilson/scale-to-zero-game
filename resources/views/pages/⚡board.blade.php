@@ -13,6 +13,30 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
      */
     public const int RECENT_WINDOW_SECONDS = 300;
 
+    /**
+     * The round holding the #1 spot when the board last checked.
+     */
+    public ?int $leaderRoundId = null;
+
+    public function mount(): void
+    {
+        $this->leaderRoundId = $this->leaderboard->first()?->id;
+    }
+
+    /**
+     * Celebrate with snow on the booth TV whenever a new round takes the #1 spot.
+     */
+    public function checkLeader(): void
+    {
+        $leader = $this->leaderboard->first();
+
+        if ($leader !== null && $leader->id !== $this->leaderRoundId) {
+            $this->dispatch('new-leader', name: $leader->player_name, deltaMs: $leader->delta_ms);
+        }
+
+        $this->leaderRoundId = $leader?->id;
+    }
+
     #[Computed]
     public function leaderboard(): Collection
     {
@@ -31,9 +55,60 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
 };
 ?>
 
-<div wire:poll.3s class="relative isolate h-dvh overflow-hidden">
+<div wire:poll.3s="checkLeader" class="relative isolate h-dvh overflow-hidden">
     {{-- Full-bleed dot-grid backdrop --}}
     <div class="absolute inset-0 bg-[radial-gradient(var(--color-slate-200)_1px,transparent_1px)] [background-size:8px_8px]"></div>
+
+    {{-- Snowfall and a "new #1" callout whenever someone takes the top spot --}}
+    <div
+        wire:ignore
+        x-data="{
+            leader: null,
+            showing: false,
+            celebrate(detail) {
+                this.leader = detail;
+                this.showing = true;
+                const field = this.$refs.snow;
+                for (let i = 0; i < 140; i++) {
+                    const flake = document.createElement('span');
+                    const size = 0.8 + Math.random() * 1.8;
+                    const fall = 4 + Math.random() * 4;
+                    flake.textContent = '❄';
+                    flake.className = 'board-flake';
+                    flake.style.left = Math.random() * 100 + 'vw';
+                    flake.style.fontSize = size + 'rem';
+                    flake.style.opacity = 0.5 + Math.random() * 0.5;
+                    flake.style.setProperty('--drift', (Math.random() * 16 - 8) + 'vw');
+                    flake.style.animationDuration = fall + 's';
+                    flake.style.animationDelay = Math.random() * 3 + 's';
+                    field.appendChild(flake);
+                    setTimeout(() => flake.remove(), (fall + 3.5) * 1000);
+                }
+                clearTimeout(this.hide);
+                this.hide = setTimeout(() => this.showing = false, 7000);
+            },
+        }"
+        x-on:new-leader.window="celebrate($event.detail)"
+        class="pointer-events-none absolute inset-0 z-30"
+    >
+        <div x-ref="snow" class="absolute inset-0 overflow-hidden"></div>
+
+        <div
+            x-show="showing"
+            x-transition:enter="transition duration-500 ease-out"
+            x-transition:enter-start="scale-75 opacity-0"
+            x-transition:leave="transition duration-500 ease-in"
+            x-transition:leave-end="scale-90 opacity-0"
+            x-cloak
+            class="absolute inset-0 grid place-items-center"
+        >
+            <div class="flex flex-col items-center gap-3 rounded-3xl bg-cloud px-14 py-10 text-center text-white shadow-2xl ring-8 ring-white/60 xl:px-20 xl:py-14">
+                <p class="font-mono text-lg tracking-widest uppercase text-white/70 xl:text-2xl">❄ New #1 ❄</p>
+                <p class="text-6xl font-semibold tracking-tight xl:text-8xl" x-text="leader?.name"></p>
+                <p class="font-mono text-2xl text-white/80 xl:text-4xl">±<span x-text="leader?.deltaMs?.toLocaleString()"></span> ms</p>
+            </div>
+        </div>
+    </div>
 
     <div class="relative z-10 flex h-full gap-8 p-8 xl:gap-10 xl:p-12">
         {{-- Left: the big leaderboard --}}
