@@ -55,6 +55,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Nudge Interval
+    |--------------------------------------------------------------------------
+    |
+    | A target that has slept for a long time wakes noticeably slower than one
+    | that fell asleep a few minutes ago. The scheduled targets:nudge command
+    | wakes any target idle for this many seconds, so players always race an
+    | app that went to sleep recently. Must be longer than the wake cooldown.
+    |
+    */
+
+    'nudge_after' => env('GAME_NUDGE_AFTER', 180),
+
+    /*
+    |--------------------------------------------------------------------------
     | Target Applications
     |--------------------------------------------------------------------------
     |

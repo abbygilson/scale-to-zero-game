@@ -39,6 +39,16 @@ class WakeTracker
     }
 
     /**
+     * Get the seconds since the given environment was last woken, or null if it never was.
+     */
+    public function secondsSinceWoken(string $environmentId): ?int
+    {
+        $lastWokenAt = Cache::get($this->cacheKey($environmentId));
+
+        return $lastWokenAt === null ? null : now()->getTimestamp() - $lastWokenAt;
+    }
+
+    /**
      * Get the cache key for the given environment's last wake timestamp.
      */
     protected function cacheKey(string $environmentId): string
