@@ -40,7 +40,7 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
     #[Computed]
     public function leaderboard(): Collection
     {
-        return Round::closest()->limit(10)->get();
+        return Round::closest()->limit(15)->get();
     }
 
     #[Computed]
@@ -165,10 +165,11 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
                 @if ($this->leaderboard->isEmpty())
                     <p class="mt-6 text-2xl text-slate-400 xl:text-3xl">No rounds yet — be the first!</p>
                 @else
-                    <ol role="list" class="mt-6 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden xl:gap-5">
+                    {{-- 15 equal rows share the panel height, so the whole top 15 fits on a 1080p TV; short screens show the top 10 --}}
+                    <ol role="list" class="mt-4 grid min-h-0 flex-1 grid-rows-[repeat(15,minmax(0,1fr))] overflow-hidden [@media(max-height:820px)]:grid-rows-[repeat(10,minmax(0,1fr))]">
                         @foreach ($this->leaderboard as $round)
-                            <li wire:key="board-leader-{{ $round->id }}" class="flex items-baseline gap-6 text-2xl xl:text-4xl">
-                                <div class="w-10 shrink-0 font-mono text-xl text-slate-400 tabular-nums xl:w-14 xl:text-3xl">{{ $loop->iteration }}</div>
+                            <li wire:key="board-leader-{{ $round->id }}" class="flex min-h-0 items-center gap-6 text-xl xl:text-3xl [@media(max-height:820px)]:text-base {{ $loop->iteration > 10 ? '[@media(max-height:820px)]:hidden' : '' }}">
+                                <div class="w-10 shrink-0 font-mono text-lg text-slate-400 tabular-nums xl:w-14 xl:text-2xl [@media(max-height:820px)]:text-sm">{{ $loop->iteration }}</div>
                                 <div class="flex-1 truncate font-semibold text-slate-700">{{ $round->player_name }}</div>
                                 <div class="shrink-0 font-mono text-cloud tabular-nums">±{{ number_format($round->delta_ms) }} ms</div>
                             </li>

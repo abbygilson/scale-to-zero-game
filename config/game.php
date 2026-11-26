@@ -35,7 +35,14 @@ return [
 
     'status_cache_ttl' => 8,
 
-    'round_timeout_ms' => 30000,
+    'round_timeout_ms' => 10000,
+
+    /*
+    | A round whose wake takes longer than this is voided instead of scored.
+    | Wakes measure 300–500 ms from Frankfurt, so anything this slow is a hiccup.
+    */
+
+    'max_wake_ms' => env('GAME_MAX_WAKE_MS', 2000),
 
     'server_region' => env('GAME_SERVER_REGION', 'Frankfurt'),
 
@@ -51,7 +58,7 @@ return [
     |
     */
 
-    'wake_cooldown' => env('GAME_WAKE_COOLDOWN', 90),
+    'wake_cooldown' => env('GAME_WAKE_COOLDOWN', 150),
 
     /*
     |--------------------------------------------------------------------------
@@ -65,7 +72,7 @@ return [
     |
     */
 
-    'nudge_after' => env('GAME_NUDGE_AFTER', 180),
+    'nudge_after' => env('GAME_NUDGE_AFTER', 300),
 
     /*
     |--------------------------------------------------------------------------

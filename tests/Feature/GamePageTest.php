@@ -2,6 +2,7 @@
 
 use App\Models\Attendee;
 use App\Models\Round;
+use App\Services\WakeProbe;
 use App\Services\WakeTracker;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -41,6 +42,19 @@ function fakeStatuses(string $appOneStatus, string $appTwoStatus = 'running'): v
             'data' => [['id' => 'env-2', 'type' => 'environments', 'attributes' => ['status' => $appTwoStatus]]],
         ]),
     ]);
+}
+
+function fakeWake(?int $coldMs, ?int $latencyMs = null): void
+{
+    app()->instance(WakeProbe::class, new class($coldMs, $latencyMs) extends WakeProbe
+    {
+        public function __construct(private ?int $coldMs, private ?int $latencyMs) {}
+
+        public function measure(string $url): ?array
+        {
+            return $this->coldMs === null ? null : ['cold_ms' => $this->coldMs, 'latency_ms' => $this->latencyMs];
+        }
+    });
 }
 
 function registeredGame(string $name = 'Josh', string $email = 'josh@example.com'): Testable
@@ -261,7 +275,9 @@ it('records a finished round with the computed delta', function () {
 
     $token = $component->get('roundToken');
 
-    $component->call('recordResult', $token, 1500, 95)
+    fakeWake(1500, 95);
+
+    $component->call('measureRound', $token)
         ->assertSet('roundActive', false)
         ->assertSet('roundToken', null)
         ->assertSee('woke from sleep in 1,405 ms')
@@ -290,7 +306,9 @@ it('dispatches round-complete and resets to a blank form on new guess', function
         ->set('guessMs', 1200)
         ->call('startRound');
 
-    $component->call('recordResult', $component->get('roundToken'), 1500, 95)
+    fakeWake(1500, 95);
+
+    $component->call('measureRound', $component->get('roundToken'))
         ->assertDispatched('round-complete');
 
     $component->call('newGuess')
@@ -310,7 +328,9 @@ it('records a round without latency when the measurement fails', function () {
         ->set('guessMs', 1200)
         ->call('startRound');
 
-    $component->call('recordResult', $component->get('roundToken'), 1500)
+    fakeWake(1500);
+
+    $component->call('measureRound', $component->get('roundToken'))
         ->assertSee('woke from sleep in 1,500 ms')
         ->assertDontSee('Full cold response');
 
@@ -327,7 +347,9 @@ it('caps a reported latency at the actual wake time', function () {
         ->set('guessMs', 1200)
         ->call('startRound');
 
-    $component->call('recordResult', $component->get('roundToken'), 1500, 9999);
+    fakeWake(1500, 9999);
+
+    $component->call('measureRound', $component->get('roundToken'));
 
     expect(Round::sole()->latency_ms)->toBe(1500);
 });
@@ -339,7 +361,9 @@ it('does not reveal which app was used in the result', function () {
         ->set('guessMs', 1200)
         ->call('startRound');
 
-    $component->call('recordResult', $component->get('roundToken'), 1500)
+    fakeWake(1500);
+
+    $component->call('measureRound', $component->get('roundToken'))
         ->assertDontSee('App One');
 });
 
@@ -349,7 +373,7 @@ it('ignores results with a stale token', function () {
     registeredGame()
         ->set('guessMs', 1200)
         ->call('startRound')
-        ->call('recordResult', 1, 1500)
+        ->call('measureRound', 1)
         ->assertSet('roundActive', true);
 
     expect(Round::count())->toBe(0);
@@ -359,25 +383,71 @@ it('ignores results when no round is active', function () {
     fakeStatuses('running');
 
     Livewire::test('pages::game')
-        ->call('recordResult', 123, 1500);
+        ->call('measureRound', 123);
 
     expect(Round::count())->toBe(0);
 });
 
-it('voids a round on timeout without persisting anything', function () {
+it('voids a round when the app never answers', function () {
     fakeStatuses('running');
+    fakeWake(null);
 
     $component = registeredGame()
         ->set('guessMs', 1200)
         ->call('startRound');
 
-    $token = $component->get('roundToken');
-
-    $component->call('voidRound', $token)
+    $component->call('measureRound', $component->get('roundToken'))
         ->assertSet('roundActive', false)
         ->assertSee('Round voided');
 
     expect(Round::count())->toBe(0);
+});
+
+it('voids a wake too slow to be a real wake instead of scoring it', function () {
+    fakeStatuses('running');
+    config()->set('game.max_wake_ms', 2000);
+
+    $component = registeredGame()
+        ->set('guessMs', 1200)
+        ->call('startRound');
+
+    fakeWake(2101, 100);
+
+    $component->call('measureRound', $component->get('roundToken'))
+        ->assertSet('roundActive', false)
+        ->assertSee('Network hiccup')
+        ->assertNotDispatched('round-complete');
+
+    expect(Round::count())->toBe(0);
+
+    $component = registeredGame('Ada', 'ada@example.com')
+        ->set('guessMs', 1200);
+    app(WakeTracker::class)->markWoken('env-1');
+    $this->travel(200)->seconds();
+
+    fakeWake(2100, 100);
+
+    $component->call('startRound')
+        ->call('measureRound', $component->get('roundToken'));
+
+    expect(Round::sole()->actual_ms)->toBe(2000);
+});
+
+it('wakes the app that has been asleep the longest', function () {
+    fakeStatuses('running');
+    $this->freezeTime();
+    config()->set('game.wake_cooldown', 150);
+
+    $tracker = app(WakeTracker::class);
+    $tracker->markWoken('env-2');
+    $this->travel(100)->seconds();
+    $tracker->markWoken('env-1');
+    $this->travel(200)->seconds();
+
+    registeredGame()
+        ->set('guessMs', 1200)
+        ->call('startRound')
+        ->assertSet('activeEnvId', 'env-2');
 });
 
 it('shows the closest guesses on the leaderboard', function () {

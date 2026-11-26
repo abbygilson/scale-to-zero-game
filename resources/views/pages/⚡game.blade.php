@@ -3,6 +3,7 @@
 use App\Models\Attendee;
 use App\Models\Round;
 use App\Services\LaravelCloud;
+use App\Services\WakeProbe;
 use App\Services\WakeTracker;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -71,6 +72,7 @@ new #[Title('Guess the Scale to Zero')] class extends Component
                 ...$target,
                 'status' => $status,
                 'cooldown' => $cooldown,
+                'idle' => $tracker->secondsSinceWoken($target['environment_id']),
                 'playable' => $cooldown === 0 && ! in_array($status, ['deploying', 'stopped']),
             ];
         });
@@ -141,7 +143,12 @@ new #[Title('Guess the Scale to Zero')] class extends Component
         $this->validate($this->guessRules());
         $this->playerName = $attendee->name;
 
-        $target = $this->targets->firstWhere('playable', true);
+        // Rotate through the apps: wake the one that has been asleep the longest,
+        // so every round catches an app that slept for about the same time.
+        $target = $this->targets
+            ->where('playable', true)
+            ->sortByDesc(fn (array $target): int => $target['idle'] ?? PHP_INT_MAX)
+            ->first();
 
         if ($target === null) {
             $seconds = $this->nextReadySeconds;
@@ -162,32 +169,42 @@ new #[Title('Guess the Scale to Zero')] class extends Component
         $this->roundActive = true;
         $this->roundToken = random_int(100000, 99999999);
 
-        $this->dispatch(
-            'round-started',
-            token: $this->roundToken,
-            url: $target['url'],
-            timeoutMs: config('game.round_timeout_ms'),
-        );
+        $this->dispatch('round-started', token: $this->roundToken, url: $target['url']);
     }
 
     /**
-     * Record a finished round.
+     * Wake the round's app from this server, then record and return the wake time.
      *
-     * The browser reports the cold first-response time and a warm baseline
-     * measured straight afterwards. Subtracting the baseline strips out the
-     * network round-trip, Cloud edge hop, and the app's steady-state request
-     * cost, leaving the wake-from-sleep time itself — the number players guess.
+     * The game app runs in the same region as the targets, so timing from here
+     * keeps the venue network out of the number. Subtracting the warm baseline
+     * strips the request's own cost, leaving the wake-from-sleep time itself.
      */
-    public function recordResult(int $token, int $coldMs, ?int $latencyMs = null): void
+    public function measureRound(int $token): ?int
     {
         if (! $this->roundActive || $token !== $this->roundToken) {
-            return;
+            return null;
         }
 
         $target = $this->findTarget($this->activeEnvId);
+        $timing = app(WakeProbe::class)->measure($target['url']);
 
-        $baselineMs = $latencyMs !== null ? min(max($latencyMs, 0), $coldMs) : null;
-        $wakeMs = $baselineMs !== null ? $coldMs - $baselineMs : $coldMs;
+        if ($timing === null) {
+            $this->notice = 'Round voided — the app never answered. Try again.';
+            $this->finishRound();
+
+            return null;
+        }
+
+        $coldMs = $timing['cold_ms'];
+        $baselineMs = $timing['latency_ms'] !== null ? min($timing['latency_ms'], $coldMs) : null;
+        $wakeMs = $coldMs - ($baselineMs ?? 0);
+
+        if ($wakeMs > config('game.max_wake_ms')) {
+            $this->notice = 'Network hiccup — that wake was too slow to count. Try again in a moment.';
+            $this->finishRound();
+
+            return null;
+        }
 
         $round = Round::create([
             'attendee_id' => $this->attendeeId,
@@ -208,6 +225,8 @@ new #[Title('Guess the Scale to Zero')] class extends Component
         $this->finishRound();
 
         $this->dispatch('round-complete');
+
+        return $wakeMs;
     }
 
     /**
@@ -217,16 +236,6 @@ new #[Title('Guess the Scale to Zero')] class extends Component
     {
         $this->reset(['lastResult', 'playerName', 'playerEmail', 'attendeeId', 'guessMs', 'notice']);
         $this->resetErrorBag();
-    }
-
-    public function voidRound(int $token): void
-    {
-        if (! $this->roundActive || $token !== $this->roundToken) {
-            return;
-        }
-
-        $this->notice = 'Round voided — the app never finished loading.';
-        $this->finishRound();
     }
 
     protected function finishRound(): void
@@ -505,8 +514,6 @@ new #[Title('Guess the Scale to Zero')] class extends Component
     const frame = document.getElementById('wake-frame');
     const stopwatch = document.getElementById('wake-stopwatch');
 
-    let raf = null;
-    let abortActiveRound = null;
     let resetTimer = null;
     let tweenRaf = null;
 
@@ -549,186 +556,47 @@ new #[Title('Guess the Scale to Zero')] class extends Component
         }, 10000);
     });
 
-    $wire.on('round-started', ({ token, url, timeoutMs }) => {
+    // The server wakes and times the app, so the venue network stays out of
+    // the number. The browser only counts the stopwatch up to the result and
+    // then shows the woken app's page behind the card (that load is untimed).
+    let activeToken = null;
+
+    $wire.on('round-started', async ({ token, url }) => {
         window.cancelGuessReset();
         cancelTween();
 
-        if (abortActiveRound) {
-            abortActiveRound();
+        activeToken = token;
+        frame.classList.add('opacity-0');
+        stopwatch.textContent = '0 ms';
+
+        const wakeMs = await $wire.measureRound(token);
+
+        if (activeToken !== token || wakeMs === null) {
+            return;
         }
 
-        // Blank the stage immediately so the previous round's page disappears.
-        // The frame is revealed again once the page finishes rendering.
-        frame.classList.add('opacity-0');
+        animateCountUp(wakeMs);
 
-        const cacheBust = url.includes('?') ? '&' : '?';
-        const previewUrl = url + cacheBust + 'cs=' + token + '-preview';
-        const wakeProbeUrl = new URL('/wake', url);
-
-        wakeProbeUrl.search = 'cs=' + token + '-probe';
-
-        let start = null;
-        let stopped = false;
-        let previewRequested = false;
-
-        const render = (ms) => {
-            stopwatch.textContent = `${Math.round(ms).toLocaleString()} ms`;
-        };
-
-        // Resource Timing gives us the browser's actual request/first-response
-        // boundary when the target exposes Timing-Allow-Origin. Fall back to
-        // the fetch promise timing for older deployed targets.
-        const responseHeaderMs = (resourceUrl, fallbackStart) => {
-            const entries = performance.getEntriesByName(resourceUrl);
-            const entry = entries[entries.length - 1];
-
-            if (entry?.responseStart > 0) {
-                const requestStart = entry.requestStart > 0 ? entry.requestStart : entry.startTime;
-
-                return entry.responseStart - requestStart;
-            }
-
-            return performance.now() - fallbackStart;
-        };
-
-        const loadPreview = () => {
-            if (previewRequested) {
-                return;
-            }
-
-            previewRequested = true;
-            frame.src = previewUrl;
-        };
-
-        // Stop the clock when the wake probe receives response headers. The
-        // iframe is only loaded after this point so it cannot be the request
-        // that wakes the app.
-        const stopClock = (ms) => {
-            if (stopped) return null;
-            stopped = true;
-            clearTimeout(timeout);
-            window.removeEventListener('message', onMessage);
-            return Math.round(ms);
-        };
-
-        // The app is awake once it has responded, so fire a few warm probes in
-        // parallel and report the fastest as the round-trip share of the wake.
-        // Running them concurrently keeps the stopwatch from sitting frozen.
-        const measureLatency = async () => {
-            const probe = async (i) => {
-                const pingUrl = new URL('/wake', url);
-                pingUrl.search = 'ping=' + token + '-' + i;
-                const t0 = performance.now();
-
-                try {
-                    await fetch(pingUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
-                } catch (error) {
-                    return null;
-                }
-
-                return responseHeaderMs(pingUrl.href, t0);
-            };
-
-            const results = (await Promise.all([0, 1, 2].map(probe))).filter((ms) => ms !== null);
-
-            return results.length > 0 ? Math.round(Math.min(...results)) : null;
-        };
-
-        // Count the stopwatch up from zero and land it on the final wake time.
-        // The number only ever climbs — it never overshoots and corrects back.
-        const animateCountUp = (target) => {
-            cancelTween();
-
-            const duration = Math.min(1100, Math.max(450, target));
-            const startedAt = performance.now();
-
-            const step = () => {
-                const t = Math.min(1, (performance.now() - startedAt) / duration);
-                const eased = 1 - Math.pow(1 - t, 3);
-                render(target * eased);
-
-                if (t < 1) {
-                    tweenRaf = requestAnimationFrame(step);
-                } else {
-                    tweenRaf = null;
-                    render(target);
-                }
-            };
-
-            tweenRaf = requestAnimationFrame(step);
-        };
-
-        const record = async (ms) => {
-            const coldMs = stopClock(ms);
-
-            if (coldMs === null) {
-                return;
-            }
-
-            loadPreview();
-
-            // The cold response includes the network round-trip and the app's
-            // steady-state request cost. Measuring a warm baseline straight
-            // after lets the server subtract it, leaving just the wake time.
-            const latency = await measureLatency();
-            const wakeMs = latency !== null ? Math.max(0, coldMs - Math.min(latency, coldMs)) : coldMs;
-
-            animateCountUp(wakeMs);
-
-            $wire.recordResult(token, coldMs, latency);
-        };
-
-        const teardown = () => {
-            stopped = true;
-            cancelAnimationFrame(raf);
-            cancelTween();
-            clearTimeout(timeout);
-            frame.removeEventListener('load', onLoad);
-            window.removeEventListener('message', onMessage);
-            abortActiveRound = null;
-        };
-
-        // The iframe load only reveals the rendered page — and acts as the
-        // fallback clock stop if the probe request failed.
-        const onLoad = () => {
-            frame.removeEventListener('load', onLoad);
+        frame.onload = () => {
+            frame.onload = null;
             frame.classList.remove('opacity-0');
-
-            if (! stopped && start !== null) {
-                record(performance.now() - start);
-            }
         };
-
-        // Optional earlier stop: the app posts first-paint to its parent.
-        const onMessage = (event) => {
-            if (event.data?.type === 'first-paint') {
-                record(performance.now() - start);
-            }
-        };
-
-        const timeout = setTimeout(() => {
-            if (stopped) return;
-            teardown();
-            frame.src = 'about:blank';
-            $wire.voidRound(token);
-        }, timeoutMs);
-
-        abortActiveRound = teardown;
-
-        frame.addEventListener('load', onLoad);
-        window.addEventListener('message', onMessage);
-
-        render(0);
-        start = performance.now();
-
-        // Primary clock stop: this HEAD probe is the first request to the
-        // sleeping app and resolves when response headers arrive.
-        fetch(wakeProbeUrl.href, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' })
-            .then(() => record(responseHeaderMs(wakeProbeUrl.href, start)))
-            .catch(() => {
-                if (! stopped) {
-                    loadPreview();
-                }
-            });
+        frame.src = url + (url.includes('?') ? '&' : '?') + 'cs=' + token + '-preview';
     });
+
+    // Count the stopwatch up from zero and land it on the final wake time.
+    const animateCountUp = (target) => {
+        cancelTween();
+
+        const duration = Math.min(1100, Math.max(450, target));
+        const startedAt = performance.now();
+
+        const step = () => {
+            const t = Math.min(1, (performance.now() - startedAt) / duration);
+            stopwatch.textContent = `${Math.round(target * (1 - Math.pow(1 - t, 3))).toLocaleString()} ms`;
+            tweenRaf = t < 1 ? requestAnimationFrame(step) : null;
+        };
+
+        tweenRaf = requestAnimationFrame(step);
+    };
 </script>

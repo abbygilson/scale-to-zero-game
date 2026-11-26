@@ -12,14 +12,13 @@ A conference booth game for Laravel Cloud. Visitors enter their name and email, 
 
 ## How a round works
 
-1. The game picks the first target app that has been idle for at least the wake cooldown (90 seconds by default, `GAME_WAKE_COOLDOWN`), and records the time it was woken.
-2. The browser sends a `HEAD` request to the target's `/wake` route. This is the first request to the sleeping app, so its response time includes the wake.
-3. The browser reads the time from sending the request to receiving the first response byte from the Resource Timing API. This leaves out DNS, TCP, and TLS setup. The result is the **cold** time.
-4. The browser then sends three warm `HEAD` requests to `/wake` in parallel and keeps the fastest. This is the **baseline**: the network round trip plus the app's steady-state request time.
-5. The server records the **wake time** as cold minus baseline. This is the number players guess against.
-6. After the probe returns, the game loads the target's home page in the background as a preview. It is not timed.
+1. The game picks, among targets idle for at least the wake cooldown (150 seconds by default, `GAME_WAKE_COOLDOWN`), the one that has been asleep the longest, so rounds rotate evenly across the targets. It records the time it was woken.
+2. The game **server** sends a `HEAD` request to the target's `/wake` route and times it from sending the request to the first response byte, leaving out DNS, TCP, and TLS setup. This is the **cold** time. Timing from the server, which runs in the same region as the targets, keeps the venue network out of the number.
+3. It then sends three warm `HEAD` requests and keeps the fastest. This is the **baseline**.
+4. The **wake time** is cold minus baseline. This is the number players guess against. A wake over 2 seconds (`GAME_MAX_WAKE_MS`) is voided as a network hiccup instead of scored.
+5. The phone counts its stopwatch up to the result and loads the target's home page in the background as a preview. That load is not timed.
 
-If the target does not respond within 30 seconds, the round is voided.
+A scheduled `targets:nudge` command wakes any target idle for 5 minutes (`GAME_NUDGE_AFTER`), because an app that sleeps much longer wakes noticeably slower. The game app needs the scheduler turned on in Cloud for this.
 
 The Laravel Cloud API does not reliably report when an environment has scaled to zero, so the game tracks the cooldown itself instead of asking the API. The API status check is off by default (`GAME_CLOUD_STATUS_ENABLED`).
 
@@ -37,7 +36,7 @@ The targets are five Laravel Cloud apps in the **Abby Gilson** organization, reg
 
 All five deploy from the [`target/`](target) folder of this repository, a plain Laravel app with one added `/wake` route. In Laravel Cloud, each app uses `target` as its root directory. Each target has these settings:
 
-- Flex compute with Scale-to-Zero after **1 minute** without requests. This must be shorter than the game's 90-second cooldown, or players race apps that are still awake.
+- Flex compute with Scale-to-Zero after **1 minute** without requests. This must be shorter than the game's 150-second cooldown, or players race apps that are still awake.
 - `SESSION_DRIVER=cookie` and `CACHE_STORE=file`, so the app needs no database.
 - The **Frame** response header set to allow all origins, so the preview can load in an iframe. Cloud's default, `deny`, blocks it.
 
