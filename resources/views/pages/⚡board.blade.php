@@ -55,7 +55,7 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
 };
 ?>
 
-<div wire:poll.3s="checkLeader" class="relative isolate h-dvh overflow-hidden">
+<div wire:poll.3s.keep-alive="checkLeader" class="relative isolate h-dvh overflow-hidden">
     {{-- Full-bleed dot-grid backdrop --}}
     <div class="absolute inset-0 bg-[radial-gradient(var(--color-slate-200)_1px,transparent_1px)] [background-size:8px_8px]"></div>
 
@@ -230,3 +230,30 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
     }
 </style>
 @endassets
+
+@script
+<script>
+    // The booth TV runs unattended: if an update fails (a deploy, an expired
+    // session, a network blip), reload the page instead of showing a dialog.
+    // Wait until the board answers first, so a reload never lands on an error page.
+    let reloading = false;
+
+    Livewire.hook('request', ({ fail }) => {
+        fail(({ preventDefault }) => {
+            preventDefault();
+
+            if (reloading) {
+                return;
+            }
+
+            reloading = true;
+
+            const reloadWhenReachable = () => fetch(window.location.href, { method: 'HEAD', cache: 'no-store' })
+                .then((response) => response.ok ? window.location.reload() : setTimeout(reloadWhenReachable, 5000))
+                .catch(() => setTimeout(reloadWhenReachable, 5000));
+
+            setTimeout(reloadWhenReachable, 3000);
+        });
+    });
+</script>
+@endscript
