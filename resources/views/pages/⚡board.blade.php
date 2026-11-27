@@ -122,7 +122,7 @@ new #[Title('Leaderboard — Guess the Scale to Zero')] class extends Component
                     ms: 0,
                     awake: false,
                     word: 0,
-                    words: ['Guess the wake time.', 'Closest guess wins…', 'a Laravel Cloud beanie!'],
+                    words: ['Guess the wake time.', 'Closest guess wins…', 'Laravel swag!'],
                     init() {
                         const run = () => {
                             const target = 300 + Math.round(Math.random() * 200);
