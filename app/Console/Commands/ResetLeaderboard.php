@@ -2,15 +2,13 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Attendee;
 use App\Models\Round;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 #[Signature('leaderboard:reset')]
-#[Description('Delete all rounds and attendees so the game starts fresh')]
+#[Description('Delete all rounds so the leaderboard starts fresh, keeping the attendee list')]
 class ResetLeaderboard extends Command
 {
     /**
@@ -18,13 +16,9 @@ class ResetLeaderboard extends Command
      */
     public function handle(): int
     {
-        [$roundsDeleted, $attendeesDeleted] = DB::transaction(fn (): array => [
-            Round::query()->delete(),
-            Attendee::query()->delete(),
-        ]);
+        $roundsDeleted = Round::query()->delete();
 
-        $this->info("Leaderboard reset — {$roundsDeleted} ".str('round')->plural($roundsDeleted).' deleted.');
-        $this->info("Attendee list reset — {$attendeesDeleted} ".str('attendee')->plural($attendeesDeleted).' deleted.');
+        $this->info("Leaderboard reset — {$roundsDeleted} ".str('round')->plural($roundsDeleted).' deleted. Attendees were kept.');
 
         return self::SUCCESS;
     }

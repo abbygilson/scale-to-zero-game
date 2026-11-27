@@ -59,10 +59,16 @@ To move the game to another event:
 
 The game itself deploys from the root of this repository. Scale-to-Zero is off for the game app, so visitors never wait for it to wake.
 
-To clear the leaderboard and the attendee list before an event, run this command. It deletes all rounds **and** all attendees.
+To clear the leaderboard, run this command. It deletes all rounds and keeps the attendee list.
 
 ```bash
 php artisan leaderboard:reset
+```
+
+To delete the stored attendee names and emails, export the CSV first, then run this command. It refuses to run without `--force`.
+
+```bash
+php artisan attendees:reset --force
 ```
 
 ## Local development

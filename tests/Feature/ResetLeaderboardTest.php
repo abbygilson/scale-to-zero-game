@@ -3,7 +3,7 @@
 use App\Models\Attendee;
 use App\Models\Round;
 
-it('deletes every round and attendee so the game starts fresh', function () {
+it('clears the leaderboard but keeps every attendee', function () {
     $player = Attendee::factory()->create();
 
     Round::factory()->count(3)->for($player)->create();
@@ -11,16 +11,28 @@ it('deletes every round and attendee so the game starts fresh', function () {
 
     $this->artisan('leaderboard:reset')
         ->expectsOutputToContain('3 rounds deleted')
-        ->expectsOutputToContain('2 attendees deleted')
         ->assertSuccessful();
 
     expect(Round::count())->toBe(0)
-        ->and(Attendee::count())->toBe(0);
+        ->and(Attendee::count())->toBe(2);
 });
 
-it('runs cleanly when there are no rounds to delete', function () {
-    $this->artisan('leaderboard:reset')
-        ->expectsOutputToContain('0 rounds deleted')
-        ->expectsOutputToContain('0 attendees deleted')
+it('refuses to delete attendees without --force', function () {
+    Attendee::factory()->count(2)->create();
+
+    $this->artisan('attendees:reset')->assertFailed();
+
+    expect(Attendee::count())->toBe(2);
+});
+
+it('deletes attendees with --force and keeps their rounds on the leaderboard', function () {
+    $player = Attendee::factory()->create();
+    Round::factory()->for($player)->create();
+
+    $this->artisan('attendees:reset --force')
+        ->expectsOutputToContain('1 attendee deleted')
         ->assertSuccessful();
+
+    expect(Attendee::count())->toBe(0)
+        ->and(Round::sole()->attendee_id)->toBeNull();
 });
